@@ -18,12 +18,11 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
         self.manager = binance_manager
         self.price_precision = 1
 
-    async def on_new_price(self, close_price, timestamp, rebalance_threshold_usd=0.0) -> HedgeResult:
-        result = super().on_new_price(close_price, timestamp, rebalance_threshold_usd)
-        logger("result",extra=result)
+    async def on_new_price_and_execute(self, close_price, timestamp, rebalance_threshold_usd=0.0) -> HedgeResult:
+        result = await super().on_new_price(close_price, timestamp, rebalance_threshold_usd)
+
         action = result.short_action
         short_blocks = result.short_blocks
-
         try:
             if action == "open":
                 qty = round(result.value_token1_usd / close_price, self.price_precision)

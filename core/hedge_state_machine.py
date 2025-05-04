@@ -3,8 +3,7 @@ import copy
 from datetime import datetime
 from typing import List
 
-import pandas as pd
-
+from infrastructure.logger_config import trade_logger, logger
 from entities.hedge_result_entity import HedgeResult
 
 
@@ -56,9 +55,8 @@ class HedgeStateMachine:
 
         return token1, token2, value_token1, value_token2, total_value
 
-    def on_new_price(self, close_price: float, timestamp: datetime, rebalance_threshold_usd: float = 10.0) -> HedgeResult:
+    async def on_new_price(self, close_price: float, timestamp: datetime, rebalance_threshold_usd: float = 10.0) -> HedgeResult:
         token1, token2, value_token1, value_token2, total_value = self._calculate_lp_values(close_price)
-
         if self.last_total_value is None:
             self.short_blocks.append({"price": close_price, "value": value_token1})
             self.last_total_value = total_value

@@ -42,7 +42,7 @@ class BinanceCandleStreamer:
 
         try:
             async with self.bm.futures_multiplex_socket([f"{self.symbol}@kline_1m"]) as stream:
-                print(f"Iniciando stream de 1m para {self.symbol.upper()}...")
+                logger.info(f"Iniciando stream de 1m para {self.symbol.upper()}...")
                 while True:
                     try:
                         msg = await stream.recv()
@@ -54,7 +54,7 @@ class BinanceCandleStreamer:
                         print(f"Erro no stream: {e}")
                         break
         except asyncio.CancelledError:
-            print("Cancelamento detectado (Ctrl+C). Finalizando stream...")
+            logger.info("Cancelamento detectado (Ctrl+C). Finalizando stream...")
         finally:
             await self.stop()
 
@@ -62,9 +62,8 @@ class BinanceCandleStreamer:
         """Processa e armazena um candle fechado."""
         timestamp = pd.to_datetime(kline["t"], unit="ms")
         close = float(kline["c"])
-        logger.info("testeeeeeeeeeeee")
         # Executar simulação de hedge e receber entidade
-        result: HedgeResult = await self.hedge.on_new_price(
+        result: HedgeResult = await self.hedge.on_new_price_and_execute(
             close_price=close,
             timestamp=timestamp,
             rebalance_threshold_usd=self.rebalance_threshold_usd
