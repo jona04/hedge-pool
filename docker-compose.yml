@@ -1,0 +1,16 @@
+# docker-compose.yml
+
+version: "3.9"
+
+services:
+  hedge-app:
+    build: .
+    container_name: hedge-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./infrastructure/hedge.log:/app/infrastructure/hedge.log
+      - ./infrastructure/hedge_trades.log:/app/infrastructure/hedge_trades.log
+    restart: unless-stopped
