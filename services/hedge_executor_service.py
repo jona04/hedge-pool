@@ -1,17 +1,36 @@
+import asyncio
 from adapters.binance_short_manager import BinanceShortManager
 from adapters.binance_candle_streamer import BinanceCandleStreamer
 from core.hedge_state_machine_with_execution import HedgeStateMachineWithExecution
-from entities.hedge_config_entity import HedgeConfig
 from infrastructure.settings import settings
+from entities.hedge_config_entity import HedgeConfig
+
+hedge_task = None
+streamer: BinanceCandleStreamer = None
+manager: BinanceShortManager = None
 
 async def start_hedge_execution(config: HedgeConfig):
+    global hedge_task, streamer, manager
+
     manager = BinanceShortManager(settings.BINANCE_KEY, settings.BINANCE_SECRET)
     await manager.__aenter__()
 
-    hedge = HedgeStateMachineWithExecution(
-        binance_manager=manager,
-        config = config
+    hedge = HedgeStateMachineWithExecution(binance_manager=manager, config=config)
+
+    streamer = BinanceCandleStreamer(
+        symbol=config.symbol,
+        hedge_simulator=hedge,
+        rebalance_threshold_usd=config.rebalance_threshold_usd
     )
 
-    streamer = BinanceCandleStreamer(config.symbol, hedge, config.rebalance_threshold_usd)
-    await streamer.start()
+    hedge_task = asyncio.create_task(streamer.start())
+
+async def stop_hedge_execution():
+    global hedge_task, streamer, manager
+
+    if streamer:
+        await streamer.stop()
+    if hedge_task:
+        hedge_task.cancel()
+    if manager:
+        await manager.__aexit__()

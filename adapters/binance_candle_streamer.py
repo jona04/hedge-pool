@@ -62,7 +62,7 @@ class BinanceCandleStreamer:
         """Processa e armazena um candle fechado."""
         timestamp = pd.to_datetime(kline["t"], unit="ms")
         close = float(kline["c"])
-
+        logger.info("testeeeeeeeeeeee")
         # Executar simulação de hedge e receber entidade
         result: HedgeResult = await self.hedge.on_new_price(
             close_price=close,
@@ -70,6 +70,7 @@ class BinanceCandleStreamer:
             rebalance_threshold_usd=self.rebalance_threshold_usd
         )
 
+    
         # Adiciona a linha ao DataFrame
         self.df.loc[len(self.df)] = result.dict()
 

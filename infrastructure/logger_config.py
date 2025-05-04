@@ -1,15 +1,12 @@
 import logging
 from pythonjsonlogger import jsonlogger
-import os
 from datetime import datetime
 import json
 
 # Diretório do log (opcional)
 LOG_FILE = "hedge.log"
 TRADE_LOG_FILE = "hedge_trades.log"
-# -------------------------------
-# Formatter bonito para o console
-# -------------------------------
+
 class PrettyJsonFormatter(jsonlogger.JsonFormatter):
     def __init__(self, *args, **kwargs):
         kwargs["json_serializer"] = json.dumps  # força uso explícito do json
@@ -28,9 +25,7 @@ class PrettyJsonFormatter(jsonlogger.JsonFormatter):
         # Usar indentação amigável
         return self.json_serializer(log_record, indent=2)
 
-# -------------------------------
-# Formatter compacto para o arquivo
-# -------------------------------
+
 class CompactJsonFormatter(jsonlogger.JsonFormatter):
     def process_log_record(self, log_record):
         log_record["timestamp"] = datetime.utcnow().isoformat()

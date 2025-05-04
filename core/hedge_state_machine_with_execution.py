@@ -1,7 +1,7 @@
 from core.hedge_state_machine import HedgeStateMachine
 from adapters.binance_short_manager import BinanceShortManager
 from entities.hedge_config_entity import HedgeConfig
-from infrastructure.logger_config import trade_logger
+from infrastructure.logger_config import trade_logger, logger
 from entities.hedge_result_entity import HedgeResult
 
 
@@ -20,7 +20,7 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
 
     async def on_new_price(self, close_price, timestamp, rebalance_threshold_usd=0.0) -> HedgeResult:
         result = super().on_new_price(close_price, timestamp, rebalance_threshold_usd)
-
+        logger("result",extra=result)
         action = result.short_action
         short_blocks = result.short_blocks
 

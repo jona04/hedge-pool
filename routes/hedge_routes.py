@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from schemas.hedge_config_schema import HedgeConfigSchema
 from entities.hedge_config_entity import HedgeConfig
-from services.hedge_executor_service import start_hedge_execution
+from services.hedge_executor_service import start_hedge_execution, stop_hedge_execution
 import asyncio
 
 router = APIRouter()
@@ -11,3 +11,8 @@ async def start_hedge(config: HedgeConfigSchema):
     config_entity = HedgeConfig(**config.dict())
     asyncio.create_task(start_hedge_execution(config_entity))
     return {"status": "Hedge execution started"}
+
+@router.post("/hedge/stop", tags=["hedge"])
+async def stop_hedge():
+    await stop_hedge_execution()
+    return {"status": "Hedge execution stopped"}
