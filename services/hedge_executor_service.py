@@ -13,5 +13,5 @@ async def start_hedge_execution(config: HedgeConfig):
         config = config
     )
 
-    streamer = BinanceCandleStreamer(settings.SYMBOL, hedge, settings.REBALANCE_THRESHOLD)
+    streamer = BinanceCandleStreamer(config.symbol, hedge, config.rebalance_threshold_usd)
     await streamer.start()

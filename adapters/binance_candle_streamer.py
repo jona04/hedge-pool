@@ -1,7 +1,7 @@
 import asyncio
 from binance import BinanceSocketManager, AsyncClient
 import pandas as pd
-from core.hedge_state_machine import HedgeStateMachine
+from core.hedge_state_machine_with_execution import HedgeStateMachineWithExecution
 from infrastructure.logger_config import logger
 from infrastructure.settings import settings
 from entities.hedge_result_entity import HedgeResult
@@ -11,7 +11,7 @@ class BinanceCandleStreamer:
     def __init__(
         self,
         symbol: str,
-        hedge_simulator: HedgeStateMachine,
+        hedge_simulator: HedgeStateMachineWithExecution,
         rebalance_threshold_usd: float,
     ):
         """

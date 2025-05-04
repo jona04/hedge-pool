@@ -66,6 +66,7 @@ class BinanceShortManager:
             quantity=quantity,
             positionSide="SHORT",
         )
+        print("order",order)
         return order
 
     async def reduce_short(
