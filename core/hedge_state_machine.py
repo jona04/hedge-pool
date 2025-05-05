@@ -16,11 +16,11 @@ class HedgeStateMachine:
         self.fee_apr_percent = fee_apr_percent
 
         self.short_blocks: List[dict] = []
-        self.last_total_value = None
-        self.initial_value = None
+        self.last_value_token1 = None
         self.accumulated_fee = 0.0
         self.results = []
         self.initial_total = None
+        self._last_decrease_usd = 0.0
 
         sqrt_Pa = math.sqrt(self.min_price)
         sqrt_Pb = math.sqrt(self.max_price)
@@ -57,15 +57,14 @@ class HedgeStateMachine:
 
     async def on_new_price(self, close_price: float, timestamp: datetime, rebalance_threshold_usd: float = 10.0) -> HedgeResult:
         token1, token2, value_token1, value_token2, total_value = self._calculate_lp_values(close_price)
-        if self.last_total_value is None:
+        if self.last_value_token1 is None:
             self.short_blocks.append({"price": close_price, "value": value_token1})
-            self.last_total_value = total_value
-            self.initial_value = total_value
+            self.last_value_token1 = value_token1
             action = "open"
             pnl_total = 0.0
-            delta_total = 0.0
+            delta_token1 = 0.0
         else:
-            delta_total = total_value - self.last_total_value
+            delta_token1 = value_token1 - self.last_value_token1
             pnl_total = sum(
                 block["value"] * ((block["price"] - close_price) / block["price"])
                 for block in self.short_blocks
@@ -76,19 +75,22 @@ class HedgeStateMachine:
                 fee_rate_minute = (self.fee_apr_percent / 100) / 525600
                 self.accumulated_fee += self.initial_total * fee_rate_minute
 
-            if delta_total <= -rebalance_threshold_usd:
+            if delta_token1 >= rebalance_threshold_usd:
+                # Token1 subiu => increase short
                 added_value = value_token1 - sum(b["value"] for b in self.short_blocks)
                 if added_value > rebalance_threshold_usd:
                     self.short_blocks.append({"price": close_price, "value": added_value})
                     action = "increase"
-                    self.last_total_value = total_value
+                    self.last_value_token1 = value_token1
 
-            elif sum(b["value"] for b in self.short_blocks) > 0 and delta_total >= rebalance_threshold_usd:
-                current_total_value = sum(b["value"] for b in self.short_blocks)
+            elif delta_token1 <= -rebalance_threshold_usd:
+            # elif sum(b["value"] for b in self.short_blocks) > 0 and delta_total >= rebalance_threshold_usd:
+                current_total_value_token1 = sum(b["value"] for b in self.short_blocks)
                 target_value = value_token1
-                reduction = current_total_value - target_value
+                reduction = current_total_value_token1 - target_value
                 if reduction > rebalance_threshold_usd:
                     action = "decrease"
+                    self._last_decrease_usd = reduction
                     new_blocks = []
                     for block in reversed(self.short_blocks):
                         if reduction <= 0:
@@ -101,7 +103,7 @@ class HedgeStateMachine:
                             reduction = 0
                             new_blocks.insert(0, block)
                     self.short_blocks = new_blocks
-                    self.last_total_value = total_value
+                    self.last_value_token1 = value_token1
 
         short_value = sum(b["value"] for b in self.short_blocks)
         total_acumulated = total_value + pnl_total
@@ -115,7 +117,7 @@ class HedgeStateMachine:
             value_token1_usd=round(value_token1, 2),
             value_token2_usd=round(value_token2, 2),
             total_value_usd=round(total_value, 2),
-            delta_total=round(delta_total, 2),
+            delta_total=round(delta_token1, 2),
             accumulated_fee=round(self.accumulated_fee, 3),
             short_action=action,
             short_value_usd=round(short_value, 2),

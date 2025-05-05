@@ -26,7 +26,7 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
         try:
             if action == "open":
                 qty = round(result.value_token1_usd / close_price, self.price_precision)
-                await self.manager.open_short(symbol=self.symbol, quantity=qty)
+
                 trade_logger.info({
                     "action": action,
                     "symbol": self.symbol,
@@ -37,10 +37,12 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
                     "timestamp": timestamp.isoformat()
                 })
 
+                await self.manager.open_short(symbol=self.symbol, quantity=qty)
+
             elif action == "increase":
                 added_value = short_blocks[-1]["value"]
                 qty = round(added_value / close_price, self.price_precision)
-                await self.manager.open_short(symbol=self.symbol, quantity=qty)
+
                 trade_logger.info({
                     "action": action,
                     "symbol": self.symbol,
@@ -51,23 +53,23 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
                     "timestamp": timestamp.isoformat()
                 })
 
+                await self.manager.open_short(symbol=self.symbol, quantity=qty)
+
             elif action == "decrease":
-                previous_value = sum(b["value"] for b in self.short_blocks)
-                target_value = result.value_token1_usd
-                excess_value = previous_value - target_value
+                excess_value = self._last_decrease_usd
                 qty = round(excess_value / close_price, self.price_precision)
-                await self.manager.reduce_short(symbol=self.symbol, quantity=qty)
+
                 trade_logger.info({
                     "action": action,
                     "symbol": self.symbol,
                     "qty": qty,
                     "price": close_price,
-                    "previous_value": previous_value,
-                    "target_value": target_value,
                     "excess_value": excess_value,
                     "short_blocks": short_blocks,
                     "timestamp": timestamp.isoformat()
                 })
+
+                await self.manager.reduce_short(symbol=self.symbol, quantity=qty)
 
         except Exception as e:
             trade_logger.error({
