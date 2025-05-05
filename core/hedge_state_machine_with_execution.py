@@ -9,16 +9,17 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
     def __init__(self, binance_manager: BinanceShortManager, config: HedgeConfig):
         super().__init__(
             qty_token1=config.qty_token1,
-            qty_token2=config.qty_token2,
             min_price=config.min_price,
             max_price=config.max_price,
-            fee_apr_percent=config.fee_apr_percent,
+            total_usd_target=config.total_usd_target,
+            fee_apr_percent=config.fee_apr_percent
         )
         self.symbol = config.symbol
         self.manager = binance_manager
         self.price_precision = 1
 
     async def on_new_price_and_execute(self, close_price, timestamp, rebalance_threshold_usd=0.0) -> HedgeResult:
+
         result = await super().on_new_price(close_price, timestamp, rebalance_threshold_usd)
 
         action = result.short_action

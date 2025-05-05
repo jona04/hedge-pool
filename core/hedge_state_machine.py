@@ -1,20 +1,27 @@
 import math
 import copy
 from datetime import datetime
-from typing import List
+from typing import List, Optional
+from scipy.optimize import minimize_scalar
 
-from infrastructure.logger_config import trade_logger, logger
 from entities.hedge_result_entity import HedgeResult
+from infrastructure.logger_config import logger
 
 
 class HedgeStateMachine:
-    def __init__(self, qty_token1, qty_token2, min_price, max_price, fee_apr_percent=0.0):
+    def __init__(
+        self,
+        qty_token1: float,
+        min_price: float,
+        max_price: float,
+        total_usd_target: float,
+        fee_apr_percent: float = 0.0,
+    ):
         self.qty_token1 = qty_token1
-        self.qty_token2 = qty_token2
         self.min_price = min_price
         self.max_price = max_price
         self.fee_apr_percent = fee_apr_percent
-
+        self.total_usd_target = total_usd_target
         self.short_blocks: List[dict] = []
         self.last_value_token1 = None
         self.accumulated_fee = 0.0
@@ -22,16 +29,22 @@ class HedgeStateMachine:
         self.initial_total = None
         self._last_decrease_usd = 0.0
 
-        sqrt_Pa = math.sqrt(self.min_price)
-        sqrt_Pb = math.sqrt(self.max_price)
-        sqrt_P_mid = math.sqrt((self.min_price + self.max_price) / 2)
+        self.sqrt_Pa = math.sqrt(self.min_price)
+        self.sqrt_Pb = math.sqrt(self.max_price)
 
-        L_from_token1 = qty_token1 / (1 / sqrt_P_mid - 1 / sqrt_Pb)
-        L_from_token2 = qty_token2 / (sqrt_P_mid - sqrt_Pa)
-        self.L = (L_from_token1 + L_from_token2) / 2
+        self.sqrt_P = None
+        self.L = None
+        self.first_close_price = None
 
-        self.sqrt_Pa = sqrt_Pa
-        self.sqrt_Pb = sqrt_Pb
+    def _calculate_adjusted_liquidity(self) -> float:
+        def error_total_usd(L):
+            token1 = L * (1 / self.sqrt_P - 1 / self.sqrt_Pb)
+            token2 = L * (self.sqrt_P - self.sqrt_Pa)
+            total = token1 * self.first_close_price + token2
+            return abs(total - self.total_usd_target)
+
+        result = minimize_scalar(error_total_usd, bounds=(1e-8, 1e8), method='bounded')
+        return result.x
 
     def _calculate_lp_values(self, close_price: float):
         sqrt_P = math.sqrt(close_price)
@@ -56,7 +69,14 @@ class HedgeStateMachine:
         return token1, token2, value_token1, value_token2, total_value
 
     async def on_new_price(self, close_price: float, timestamp: datetime, rebalance_threshold_usd: float = 10.0) -> HedgeResult:
+
+        if self.first_close_price is None:
+            self.first_close_price = close_price
+            self.sqrt_P = math.sqrt(close_price)
+            self.L = self._calculate_adjusted_liquidity()
+
         token1, token2, value_token1, value_token2, total_value = self._calculate_lp_values(close_price)
+
         if self.last_value_token1 is None:
             self.short_blocks.append({"price": close_price, "value": value_token1})
             self.last_value_token1 = value_token1
@@ -76,7 +96,6 @@ class HedgeStateMachine:
                 self.accumulated_fee += self.initial_total * fee_rate_minute
 
             if delta_token1 >= rebalance_threshold_usd:
-                # Token1 subiu => increase short
                 added_value = value_token1 - sum(b["value"] for b in self.short_blocks)
                 if added_value > rebalance_threshold_usd:
                     self.short_blocks.append({"price": close_price, "value": added_value})
@@ -84,7 +103,6 @@ class HedgeStateMachine:
                     self.last_value_token1 = value_token1
 
             elif delta_token1 <= -rebalance_threshold_usd:
-            # elif sum(b["value"] for b in self.short_blocks) > 0 and delta_total >= rebalance_threshold_usd:
                 current_total_value_token1 = sum(b["value"] for b in self.short_blocks)
                 target_value = value_token1
                 reduction = current_total_value_token1 - target_value
