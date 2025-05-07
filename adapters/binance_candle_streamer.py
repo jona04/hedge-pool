@@ -34,6 +34,7 @@ class BinanceCandleStreamer:
         ])
         self.hedge = hedge_simulator
         self.rebalance_threshold_usd = rebalance_threshold_usd
+        self.last_processed_candle_time = None
 
     async def start(self):
         """Inicializa cliente e começa a escutar candles de 1 minuto."""
@@ -61,6 +62,11 @@ class BinanceCandleStreamer:
     async def _process_candle(self, kline: dict):
         """Processa e armazena um candle fechado."""
         timestamp = pd.to_datetime(kline["t"], unit="ms")
+
+        if self.last_processed_candle_time == timestamp:
+            return
+        self.last_processed_candle_time = timestamp
+
         close = float(kline["c"])
         # Executar simulação de hedge e receber entidade
         result: HedgeResult = await self.hedge.on_new_price_and_execute(

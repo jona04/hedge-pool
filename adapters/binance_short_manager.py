@@ -7,6 +7,9 @@ import pandas as pd
 from binance.async_client import AsyncClient
 from binance.enums import SIDE_BUY, SIDE_SELL, ORDER_TYPE_MARKET
 
+from infrastructure.logger_config import trade_logger
+
+
 # -----------------------------------------------------------------------------
 # 1. BinanceShortManager
 # -----------------------------------------------------------------------------
@@ -66,7 +69,7 @@ class BinanceShortManager:
             quantity=quantity,
             positionSide="SHORT",
         )
-        print("order",order)
+        trade_logger.info("open-order", extra=order)
         return order
 
     async def reduce_short(
@@ -82,5 +85,6 @@ class BinanceShortManager:
             quantity=quantity,
             positionSide="SHORT",
         )
+        trade_logger.info("reduce-order", extra=order)
         return order
 
