@@ -1,6 +1,9 @@
 import asyncio
-from binance import BinanceSocketManager, AsyncClient
 import pandas as pd
+from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from binance import BinanceSocketManager, AsyncClient
+
 from core.hedge_state_machine_with_execution import HedgeStateMachineWithExecution
 from infrastructure.logger_config import logger
 from infrastructure.settings import settings
@@ -14,15 +17,13 @@ class BinanceCandleStreamer:
         hedge_simulator: HedgeStateMachineWithExecution,
         rebalance_threshold_usd: float,
     ):
-        """
-        Streamer assíncrono de candles da Binance para um símbolo específico.
-
-        Args:
-            symbol (str): Par de trading, ex: 'BTCUSDT'
-        """
         self.symbol = symbol.lower()
         self.client = None
         self.bm = None
+        self.hedge = hedge_simulator
+        self.rebalance_threshold_usd = rebalance_threshold_usd
+        self._last_close_price = None
+        self.scheduler = AsyncIOScheduler()
         self.df = pd.DataFrame(columns=[
             "time", "close",
             "quantity_token1", "quantity_token2",
@@ -32,15 +33,16 @@ class BinanceCandleStreamer:
             "short_pnl_usd", "total_accumulated",
             "total_accumulated_with_fee", "short_blocks"
         ])
-        self.hedge = hedge_simulator
-        self.rebalance_threshold_usd = rebalance_threshold_usd
-        self.last_processed_candle_time = None
 
     async def start(self):
-        """Inicializa cliente e começa a escutar candles de 1 minuto."""
         self.client = await AsyncClient.create(settings.BINANCE_KEY, settings.BINANCE_SECRET)
         self.bm = BinanceSocketManager(self.client)
 
+        # Inicia execução periódica do hedge
+        self.scheduler.add_job(self._execute_hedge, "interval", seconds=5)
+        self.scheduler.start()
+
+        # Inicia stream da Binance
         try:
             async with self.bm.futures_multiplex_socket([f"{self.symbol}@kline_1m"]) as stream:
                 logger.info(f"Iniciando stream de 1m para {self.symbol.upper()}...")
@@ -48,40 +50,30 @@ class BinanceCandleStreamer:
                     try:
                         msg = await stream.recv()
                         kline = msg["data"]["k"]
-
-                        if kline["x"]:  # Se candle estiver completo
-                            await self._process_candle(kline)
+                        self._last_close_price = float(kline["c"])
                     except Exception as e:
-                        print(f"Erro no stream: {e}")
+                        logger.error(f"Erro no stream: {e}")
                         break
         except asyncio.CancelledError:
-            logger.info("Cancelamento detectado (Ctrl+C). Finalizando stream...")
+            logger.info("Cancelamento detectado. Finalizando stream...")
         finally:
             await self.stop()
 
-    async def _process_candle(self, kline: dict):
-        """Processa e armazena um candle fechado."""
-        timestamp = pd.to_datetime(kline["t"], unit="ms")
-
-        if self.last_processed_candle_time == timestamp:
+    async def _execute_hedge(self):
+        """Executa hedge com o último preço disponível."""
+        if self._last_close_price is None:
             return
-        self.last_processed_candle_time = timestamp
 
-        close = float(kline["c"])
-        # Executar simulação de hedge e receber entidade
+        timestamp = datetime.utcnow()
         result: HedgeResult = await self.hedge.on_new_price_and_execute(
-            close_price=close,
+            close_price=self._last_close_price,
             timestamp=timestamp,
             rebalance_threshold_usd=self.rebalance_threshold_usd
         )
-
-    
-        # Adiciona a linha ao DataFrame
         self.df.loc[len(self.df)] = result.dict()
-
-        logger.info("\nHedge result", extra=result.dict())
+        logger.info("Hedge result", extra=result.dict())
 
     async def stop(self):
-        """Fecha conexão com Binance."""
+        self.scheduler.shutdown(wait=False)
         if self.client:
             await self.client.close_connection()

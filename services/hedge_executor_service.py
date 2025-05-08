@@ -12,6 +12,9 @@ manager: BinanceShortManager = None
 async def start_hedge_execution(config: HedgeConfig):
     global hedge_task, streamer, manager
 
+    if hedge_task and not hedge_task.done():
+        return
+
     manager = BinanceShortManager(settings.BINANCE_KEY, settings.BINANCE_SECRET)
     await manager.__aenter__()
 
@@ -30,7 +33,12 @@ async def stop_hedge_execution():
 
     if streamer:
         await streamer.stop()
+        streamer = None
+
     if hedge_task:
         hedge_task.cancel()
+        hedge_task = None
+
     if manager:
         await manager.__aexit__()
+        manager = None

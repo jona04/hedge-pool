@@ -7,3 +7,4 @@ python-dotenv
 pandas
 python-json-logger
 scipy
+apscheduler
