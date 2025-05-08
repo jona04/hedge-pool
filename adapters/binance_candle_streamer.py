@@ -1,7 +1,8 @@
 import asyncio
+from typing import Optional
+
 import pandas as pd
-from datetime import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime, timedelta
 from binance import BinanceSocketManager, AsyncClient
 
 from core.hedge_state_machine_with_execution import HedgeStateMachineWithExecution
@@ -16,14 +17,15 @@ class BinanceCandleStreamer:
         symbol: str,
         hedge_simulator: HedgeStateMachineWithExecution,
         rebalance_threshold_usd: float,
+        hedge_interval_seconds: int = 10
     ):
         self.symbol = symbol.lower()
         self.client = None
         self.bm = None
         self.hedge = hedge_simulator
         self.rebalance_threshold_usd = rebalance_threshold_usd
-        self._last_close_price = None
-        self.scheduler = AsyncIOScheduler()
+        self._last_hedge_time: Optional[datetime] = None
+        self.hedge_interval = hedge_interval_seconds
         self.df = pd.DataFrame(columns=[
             "time", "close",
             "quantity_token1", "quantity_token2",
@@ -38,10 +40,6 @@ class BinanceCandleStreamer:
         self.client = await AsyncClient.create(settings.BINANCE_KEY, settings.BINANCE_SECRET)
         self.bm = BinanceSocketManager(self.client)
 
-        # Inicia execução periódica do hedge
-        self.scheduler.add_job(self._execute_hedge, "interval", seconds=5)
-        self.scheduler.start()
-
         # Inicia stream da Binance
         try:
             async with self.bm.futures_multiplex_socket([f"{self.symbol}@kline_1m"]) as stream:
@@ -49,8 +47,20 @@ class BinanceCandleStreamer:
                 while True:
                     try:
                         msg = await stream.recv()
-                        kline = msg["data"]["k"]
-                        self._last_close_price = float(kline["c"])
+                        kline = msg.get("data", {}).get("k")
+                        if not kline:
+                            continue
+                        close = float(kline["c"])
+                        now = datetime.utcnow()
+
+                        # Executa hedge a cada 5 segundos
+                        if (
+                            self._last_hedge_time is None or
+                            (now - self._last_hedge_time) >= timedelta(seconds=self.hedge_interval)
+                        ):
+                            self._last_hedge_time = now
+                            await self._execute_hedge(close, now)
+
                     except Exception as e:
                         logger.error(f"Erro no stream: {e}")
                         break
@@ -59,14 +69,10 @@ class BinanceCandleStreamer:
         finally:
             await self.stop()
 
-    async def _execute_hedge(self):
+    async def _execute_hedge(self, close_price: float, timestamp: datetime):
         """Executa hedge com o último preço disponível."""
-        if self._last_close_price is None:
-            return
-
-        timestamp = datetime.utcnow()
         result: HedgeResult = await self.hedge.on_new_price_and_execute(
-            close_price=self._last_close_price,
+            close_price=close_price,
             timestamp=timestamp,
             rebalance_threshold_usd=self.rebalance_threshold_usd
         )
@@ -74,6 +80,5 @@ class BinanceCandleStreamer:
         logger.info("Hedge result", extra=result.dict())
 
     async def stop(self):
-        self.scheduler.shutdown(wait=False)
         if self.client:
             await self.client.close_connection()
