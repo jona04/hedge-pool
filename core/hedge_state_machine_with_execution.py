@@ -40,7 +40,7 @@ class HedgeStateMachineWithExecution(HedgeStateMachine):
                         "timestamp": timestamp.isoformat()
                     })
 
-                    # await self.manager.open_short(symbol=self.symbol, quantity=qty)
+                    await self.manager.open_short(symbol=self.symbol, quantity=qty)
 
                 elif action == "increase":
                     added_value = short_blocks[-1]["value"]
