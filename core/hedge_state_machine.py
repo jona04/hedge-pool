@@ -120,8 +120,11 @@ class HedgeStateMachine:
         )
 
         # 2) lógica de transição de estado --------------------------
+        delta_v1 = 0
         if self.mode is None:
             # --- ainda sem hedge ---
+            delta_v1 = v1_usd - self.value_token1_ref
+
             # preço CAIU → Token1 USD aumentou
             if   v1_usd - self.value_token1_ref >= rebalance_threshold_usd:
                 self.mode = "down"
@@ -137,6 +140,8 @@ class HedgeStateMachine:
 
         # --- hedge-DOWN ativo --------------------------------------
         elif self.mode == "down":
+            delta_v1 = v1_usd - self.last_v1_for_delta
+
             # Se preço voltou para cima do reference → fecha tudo
             if close_price >= self.price_reference and self.short_blocks:
                 self._pending_close_usd = sum(b["value"] for b in self.short_blocks)
@@ -222,7 +227,7 @@ class HedgeStateMachine:
             value_token1_usd=round(v1_usd, 2),
             value_token2_usd=round(v2_usd, 2),
             total_value_usd=round(total_usd, 2),
-            delta_total=round(v1_usd - self.value_token1_ref, 2),
+            delta_total=round(delta_v1, 2),
             accumulated_fee=round(self.accumulated_fee, 3),
             short_action=action,
             short_value_usd=round(short_value, 2),
