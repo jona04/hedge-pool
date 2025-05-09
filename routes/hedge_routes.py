@@ -2,7 +2,6 @@ from fastapi import APIRouter
 from schemas.hedge_config_schema import HedgeConfigSchema
 from entities.hedge_config_entity import HedgeConfig
 from services.hedge_executor_service import start_hedge_execution, stop_hedge_execution, hedge_task
-import asyncio
 
 router = APIRouter()
 
