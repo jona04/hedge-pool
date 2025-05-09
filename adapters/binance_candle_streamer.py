@@ -74,7 +74,8 @@ class BinanceCandleStreamer:
         result: HedgeResult = await self.hedge.on_new_price_and_execute(
             close_price=close_price,
             timestamp=timestamp,
-            rebalance_threshold_usd=self.rebalance_threshold_usd
+            rebalance_threshold_usd=self.rebalance_threshold_usd,
+            hedge_interval=self.hedge_interval
         )
         self.df.loc[len(self.df)] = result.dict()
         logger.info("Hedge result", extra=result.dict())
